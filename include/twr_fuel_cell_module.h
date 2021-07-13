@@ -5,9 +5,10 @@
 #include <twr_sc16is740.h>
 #include <twr_scheduler.h>
 #include <twr_fifo.h>
+#include <twr_log.h>
 
 #define _TWR_MODULE_FUEL_CELL_I2C_TLA2021_ADDRESS 0x4B
-#define _TWR_MODULE_FUEL_CELL_DELAY_MEASUREMENT 10
+#define _TWR_MODULE_FUEL_CELL_DELAY_MEASUREMENT 200
 
 #define _TWR_MODULE_FUEL_CELL_DELAY_RUN 1000
 

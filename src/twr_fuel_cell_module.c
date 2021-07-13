@@ -52,11 +52,15 @@ static void _twr_module_fuel_cell_task_interval(void *param)
 {
     (void) param;
     twr_module_fuel_cell_measure();
+
+    twr_log_debug("task interval");
     twr_scheduler_plan_current_relative(_twr_module_fuel_cell._update_interval);
 }
 
 static void _twr_module_fuel_cell_task_measure(void *param)
 {
+    twr_log_debug("task measure %d", _twr_module_fuel_cell._state);
+
     (void) param;
 
     start:
@@ -78,8 +82,10 @@ static void _twr_module_fuel_cell_task_measure(void *param)
         {
             _twr_module_fuel_cell._state = TWR_MODULE_FUEL_CELL_STATE_ERROR;
 
-            if (!twr_i2c_memory_write_16b(TWR_I2C_I2C0, _TWR_MODULE_FUEL_CELL_I2C_TLA2021_ADDRESS, 0x01, 0x0503))
+            if (!twr_i2c_memory_write_16b(TWR_I2C_I2C0, _TWR_MODULE_FUEL_CELL_I2C_TLA2021_ADDRESS, 0x01, 0x8503))
             {
+                twr_log_debug("error init");
+
                 goto start;
             }
 
@@ -96,10 +102,14 @@ static void _twr_module_fuel_cell_task_measure(void *param)
         }
         case TWR_MODULE_FUEL_CELL_STATE_MEASURE:
         {
+            uint16_t reg_configuration;
+
             _twr_module_fuel_cell._state = TWR_MODULE_FUEL_CELL_STATE_ERROR;
 
             if (!twr_i2c_memory_write_16b(TWR_I2C_I2C0, _TWR_MODULE_FUEL_CELL_I2C_TLA2021_ADDRESS, 0x01, 0x8503))
             {
+                twr_log_debug("error measure");
+
                 goto start;
             }
 
@@ -117,22 +127,32 @@ static void _twr_module_fuel_cell_task_measure(void *param)
 
             if (!twr_i2c_memory_read_16b(TWR_I2C_I2C0, _TWR_MODULE_FUEL_CELL_I2C_TLA2021_ADDRESS, 0x01, &reg_configuration))
             {
+                twr_log_debug("error read 0");
+
                 goto start;
             }
 
             if ((reg_configuration & 0x8000) != 0x8000)
             {
+                twr_log_debug("error read 1");
+
                 goto start;
             }
 
             if (!twr_i2c_memory_read_16b(TWR_I2C_I2C0, _TWR_MODULE_FUEL_CELL_I2C_TLA2021_ADDRESS, 0x00, &_twr_module_fuel_cell._reg_result))
             {
+                twr_log_debug("error read 2");
+
                 goto start;
             }
 
             _twr_module_fuel_cell._voltage_valid = true;
 
             _twr_module_fuel_cell._state = TWR_MODULE_FUEL_CELL_STATE_UPDATE;
+
+            twr_log_debug("%d", reg_configuration);
+
+            twr_log_debug("error read 3");
 
             goto start;
         }
@@ -152,6 +172,8 @@ static void _twr_module_fuel_cell_task_measure(void *param)
         default:
         {
             _twr_module_fuel_cell._state = TWR_MODULE_FUEL_CELL_STATE_ERROR;
+
+            twr_log_debug("error default");
 
             goto start;
         }
