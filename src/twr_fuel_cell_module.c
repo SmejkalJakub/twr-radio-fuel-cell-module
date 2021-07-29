@@ -65,6 +65,8 @@ static void _twr_module_fuel_cell_task_measure(void *param)
     {
         case TWR_MODULE_FUEL_CELL_STATE_ERROR:
         {
+            twr_log_debug("error");
+
             if (_twr_module_fuel_cell._event_handler != NULL)
             {
                 _twr_module_fuel_cell._event_handler(TWR_MODULE_FUEL_CELL_EVENT_ERROR, _twr_module_fuel_cell._event_param);
@@ -76,6 +78,7 @@ static void _twr_module_fuel_cell_task_measure(void *param)
         }
         case TWR_MODULE_FUEL_CELL_STATE_INITIALIZE:
         {
+            twr_log_debug("init");
             _twr_module_fuel_cell._state = TWR_MODULE_FUEL_CELL_STATE_ERROR;
 
             if (!twr_i2c_memory_write_16b(TWR_I2C_I2C0, _TWR_MODULE_FUEL_CELL_I2C_TLA2021_ADDRESS, 0x01, 0x0503))
@@ -96,6 +99,7 @@ static void _twr_module_fuel_cell_task_measure(void *param)
         }
         case TWR_MODULE_FUEL_CELL_STATE_MEASURE:
         {
+            twr_log_debug("measure");
             _twr_module_fuel_cell._state = TWR_MODULE_FUEL_CELL_STATE_ERROR;
 
             if (!twr_i2c_memory_write_16b(TWR_I2C_I2C0, _TWR_MODULE_FUEL_CELL_I2C_TLA2021_ADDRESS, 0x01, 0x8503))
@@ -111,6 +115,7 @@ static void _twr_module_fuel_cell_task_measure(void *param)
         }
         case TWR_MODULE_FUEL_CELL_STATE_READ:
         {
+            twr_log_debug("read");
             _twr_module_fuel_cell._state = TWR_MODULE_FUEL_CELL_STATE_ERROR;
 
             uint16_t reg_configuration;
@@ -138,6 +143,7 @@ static void _twr_module_fuel_cell_task_measure(void *param)
         }
         case TWR_MODULE_FUEL_CELL_STATE_UPDATE:
         {
+            twr_log_debug("update");
             _twr_module_fuel_cell._measurement_active = false;
 
             if (_twr_module_fuel_cell._event_handler != NULL)
@@ -170,9 +176,11 @@ bool twr_module_fuel_cell_get_voltage(float *voltage)
     if (reg_result == 0x7ff0)
         return false;
 
-    twr_log_debug("TEST: %d", reg_result);
+    twr_log_debug("RAW: %u", (uint32_t) (reg_result >> 4));
 
-    *voltage = reg_result < 0 ? 0 : (uint64_t) (reg_result >> 4) * 2048 * (10 + 5) / (2047 * 5);
+
+
+    *voltage = reg_result < 0 ? 0 : (uint64_t) (reg_result >> 4) * 2048 * (TWR_FUEL_CELL_R1_DIVIDER + TWR_FUEL_CELL_R2_DIVIDER) / (2047 * TWR_FUEL_CELL_R2_DIVIDER);
     *voltage /= 1000.f;
 
     return true;
