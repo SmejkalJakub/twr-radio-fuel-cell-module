@@ -2,7 +2,7 @@
 #include <twr_fuel_cell_module.h>
 
 #define TEMPERATURE_UPDATE_INTERVAL (5 * 1000)
-#define VOLTAGE_UPDATE_INTERVAL (2 * 1000)
+#define VOLTAGE_UPDATE_INTERVAL (5 * 1000)
 
 #define BATTERY_UPDATE_INTERVAL (1 * 60 * 1000)
 #define APPLICATION_TASK_ID 0
@@ -214,8 +214,10 @@ void fuel_cell_module_event_handler(twr_module_fuel_cell_event_t event, void *pa
 
         twr_log_debug("voltage: %.2f", voltage);
 
-        twr_data_stream_feed(&voltage_stream, &voltage);
-
+        if(voltage != NAN)
+        {
+            twr_data_stream_feed(&voltage_stream, &voltage);
+        }
     }
     twr_scheduler_plan_now(APPLICATION_TASK_ID);
 
@@ -459,12 +461,12 @@ void application_task(void)
         w = twr_gfx_draw_string(gfx, 5, 23, "Charge", 1);
 
         twr_gfx_set_font(gfx, &twr_font_ubuntu_28);
-        w = twr_gfx_printf(gfx, w + 5, 15, 1, "%.2f", x);
+        w = twr_gfx_printf(gfx, w + 5, 15, 1, "%.2f", voltage);
 
         twr_gfx_set_font(gfx, &twr_font_ubuntu_15);
         twr_gfx_draw_string(gfx, w + 5, 23, "V", 1);
 
-        graph(gfx, 0, 40, 127, 127, &temperature_stream, TEMPERATURE_UPDATE_INTERVAL, 0, 1.5f, 4, true, "%.2f" "\xb0" "V");
+        graph(gfx, 0, 40, 127, 127, &voltage_stream, TEMPERATURE_UPDATE_INTERVAL, 0, 1.5f, 4, true, "%.2f" "\xb0" "V");
     }
 
     twr_gfx_update(gfx);

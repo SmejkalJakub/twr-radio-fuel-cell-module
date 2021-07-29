@@ -155,8 +155,6 @@ static void _twr_module_fuel_cell_task_measure(void *param)
 
             twr_log_debug("%d", reg_configuration);
 
-            twr_log_debug("error read 3");
-
             goto start;
         }
         case TWR_MODULE_FUEL_CELL_STATE_UPDATE:
