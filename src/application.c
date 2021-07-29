@@ -14,9 +14,12 @@
 TWR_DATA_STREAM_FLOAT_BUFFER(temperature_stream_buffer, (TEMPERATURE_GRAPH / TEMPERATURE_UPDATE_INTERVAL))
 TWR_DATA_STREAM_FLOAT_BUFFER(voltage_stream_buffer, (VOLTAGE_GRAPH / VOLTAGE_UPDATE_INTERVAL))
 
-
 // LED instance
 twr_led_t led;
+
+twr_led_t lcd_led_green;
+twr_led_t lcd_led_blue;
+twr_led_t lcd_led_red;
 
 // Button instance
 twr_button_t button;
@@ -29,49 +32,98 @@ float temperature = NAN;
 float voltage = NAN;
 float x = 0;
 
+int points = 0;
+
 twr_data_stream_t temperature_stream;
 twr_data_stream_t voltage_stream;
 
 
+int game_counter = 0;
+int game_counter_stop = 5;
+
+int counter = 6;
+bool game_active = false;
+
+bool timer_active = false;
+bool timer_done = false;
+
+int point_x = 63;
+int point_y = 80;
+
 bool page = true;
-
-/*static bool fuel_cell_meassure(float *voltage)
-{
-    *voltage = NAN;
-
-    if (!twr_i2c_memory_write_16b(TWR_I2C_I2C0, 0x4B, 0x01, 0xc583))
-        return false;
-
-    int16_t result;
-
-    if (!twr_i2c_memory_read_16b(TWR_I2C_I2C0, 0x4B, 0x00, (uint16_t *) &result))
-        return false;
-
-    if (result == 0x7ff0)
-        return false;
-
-
-    *voltage = result < 0 ? 0 : (uint64_t) (result >> 4) * 2048 * (10 + 5) / (2047 * 5);
-    *voltage /= 1000.f;
-    twr_log_debug("%d", *voltage);
-
-    return true;
-}*/
 
 void button_event_handler(twr_button_t *self, twr_button_event_t event, void *event_param)
 {
     if (event == TWR_BUTTON_EVENT_PRESS)
     {
-        /*page = !page;*/
-
         twr_scheduler_plan_now(APPLICATION_TASK_ID);
     }
+}
+
+void fast_radio_messages()
+{
+    twr_radio_pub_int("game/points", &points);
+
+    game_counter++;
+
+    if(game_counter == game_counter_stop)
+    {
+        game_active = true;
+        game_counter = 0;
+
+        game_counter_stop = (rand() % 4) + 4;
+        twr_log_debug("%d", game_counter_stop);
+
+        twr_scheduler_plan_current_from_now(800);
+    }
+    else
+    {
+        game_active = false;
+        twr_scheduler_plan_current_from_now(300);
+        twr_led_pulse(&lcd_led_blue, 100);
+    }
+
+    twr_scheduler_plan_now(APPLICATION_TASK_ID);
+}
+
+void countdown_timer()
+{
+    counter--;
+    if(counter > 0)
+    {
+        twr_led_pulse(&lcd_led_blue, 300);
+        twr_scheduler_plan_current_from_now(1000);
+    }
+    else
+    {
+        counter = 6;
+        timer_active = false;
+
+        timer_done = true;
+
+        twr_scheduler_register(fast_radio_messages, NULL, 0);
+    }
+    twr_scheduler_plan_now(APPLICATION_TASK_ID);
 }
 
 void lcd_event_handler(twr_module_lcd_event_t event, void *event_param)
 {
     if(event == TWR_MODULE_LCD_EVENT_RIGHT_PRESS)
     {
+
+        if(timer_done && game_active)
+        {
+            twr_log_debug("points++");
+            twr_led_pulse(&lcd_led_green, 200);
+            points++;
+        }
+        else if(timer_done && !game_active)
+        {
+            twr_log_debug("points--");
+
+            twr_led_pulse(&lcd_led_red, 200);
+            points--;
+        }
         //x = ((float)rand()/(float)(RAND_MAX)) * 1.5f;
 
         x += 0.02;
@@ -87,6 +139,20 @@ void lcd_event_handler(twr_module_lcd_event_t event, void *event_param)
     }
     else if(event == TWR_MODULE_LCD_EVENT_LEFT_PRESS)
     {
+        if(timer_done && game_active)
+        {
+            twr_log_debug("points++");
+
+            twr_led_pulse(&lcd_led_green, 200);
+            points++;
+        }
+        else if(timer_done && !game_active)
+        {
+            twr_log_debug("points--");
+
+            twr_led_pulse(&lcd_led_red, 200);
+            points--;
+        }
         x -= 0.02;
 
         if(x < 0)
@@ -97,6 +163,11 @@ void lcd_event_handler(twr_module_lcd_event_t event, void *event_param)
         float y = pow(x, 2);
 
         twr_data_stream_feed(&temperature_stream, &y);
+    }
+    else if(event == TWR_MODULE_LCD_EVENT_BOTH_HOLD)
+    {
+        timer_active = true;
+        twr_scheduler_register(countdown_timer, NULL, 0);
     }
 }
 
@@ -175,20 +246,22 @@ void application_init(void)
     twr_data_stream_init(&voltage_stream, 1, &voltage_stream_buffer);
 
     twr_radio_init(TWR_RADIO_MODE_NODE_SLEEPING);
-    twr_radio_pairing_request("voc-sensor", VERSION);
+    twr_radio_pairing_request("fuel-cell", VERSION);
 
     twr_module_lcd_init();
     twr_module_lcd_set_event_handler(lcd_event_handler, NULL);
     gfx = twr_module_lcd_get_gfx();
 
+    const twr_led_driver_t* driver = twr_module_lcd_get_led_driver();
+    twr_led_init_virtual(&lcd_led_green, TWR_MODULE_LCD_LED_GREEN, driver, 1);
+    twr_led_init_virtual(&lcd_led_blue, TWR_MODULE_LCD_LED_BLUE, driver, 1);
+    twr_led_init_virtual(&lcd_led_red, TWR_MODULE_LCD_LED_RED, driver, 1);
 
     twr_module_fuel_cell_init();
     twr_module_fuel_cell_set_event_handler(fuel_cell_module_event_handler, NULL);
     twr_module_fuel_cell_set_update_interval(VOLTAGE_UPDATE_INTERVAL);
 
     twr_led_pulse(&led, 2000);
-
-
 }
 
 void graph(twr_gfx_t *gfx, int x0, int y0, int x1, int y1, twr_data_stream_t *data_stream, int time_step, float min_value, float max_value, int number_of_y_parts, bool grid_lines, const char *format)
@@ -358,9 +431,8 @@ void application_task(void)
 
     twr_gfx_clear(gfx);
 
-    if (page)
+    if (page && !timer_active && !timer_done)
     {
-
         int w;
         twr_gfx_set_font(gfx, &twr_font_ubuntu_15);
         w = twr_gfx_draw_string(gfx, 5, 23, "Charge", 1);
@@ -373,7 +445,28 @@ void application_task(void)
 
         graph(gfx, 0, 40, 127, 127, &voltage_stream, TEMPERATURE_UPDATE_INTERVAL, 0, 1.5f, 4, true, "%.2f" "\xb0" "V");
 
+
     }
+    else if(timer_active)
+    {
+        twr_gfx_set_font(gfx, &twr_font_ubuntu_33);
+        twr_gfx_printf(gfx, 55, 50, 1, "%d", counter);
+    }
+    else if(timer_done)
+    {
+        int w;
+        twr_gfx_set_font(gfx, &twr_font_ubuntu_15);
+        w = twr_gfx_draw_string(gfx, 5, 23, "Charge", 1);
+
+        twr_gfx_set_font(gfx, &twr_font_ubuntu_28);
+        w = twr_gfx_printf(gfx, w + 5, 15, 1, "%.2f", x);
+
+        twr_gfx_set_font(gfx, &twr_font_ubuntu_15);
+        twr_gfx_draw_string(gfx, w + 5, 23, "V", 1);
+
+        graph(gfx, 0, 40, 127, 127, &temperature_stream, TEMPERATURE_UPDATE_INTERVAL, 0, 1.5f, 4, true, "%.2f" "\xb0" "V");
+    }
+
     twr_gfx_update(gfx);
 
     twr_system_pll_disable();
