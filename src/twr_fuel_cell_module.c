@@ -1,7 +1,5 @@
 #include <twr_fuel_cell_module.h>
 
-#include <twr_log.h>
-
 static struct
 {
     bool _initialized;
@@ -53,14 +51,11 @@ static void _twr_module_fuel_cell_task_interval(void *param)
     (void) param;
     twr_module_fuel_cell_measure();
 
-    twr_log_debug("task interval");
     twr_scheduler_plan_current_relative(_twr_module_fuel_cell._update_interval);
 }
 
 static void _twr_module_fuel_cell_task_measure(void *param)
 {
-    twr_log_debug("task measure %d", _twr_module_fuel_cell._state);
-
     (void) param;
 
     start:
@@ -69,8 +64,6 @@ static void _twr_module_fuel_cell_task_measure(void *param)
     {
         case TWR_MODULE_FUEL_CELL_STATE_ERROR:
         {
-            twr_log_debug("error");
-
             if (_twr_module_fuel_cell._event_handler != NULL)
             {
                 _twr_module_fuel_cell._event_handler(TWR_MODULE_FUEL_CELL_EVENT_ERROR, _twr_module_fuel_cell._event_param);
@@ -82,13 +75,10 @@ static void _twr_module_fuel_cell_task_measure(void *param)
         }
         case TWR_MODULE_FUEL_CELL_STATE_INITIALIZE:
         {
-            twr_log_debug("init");
             _twr_module_fuel_cell._state = TWR_MODULE_FUEL_CELL_STATE_ERROR;
 
             if (!twr_i2c_memory_write_16b(TWR_I2C_I2C0, _TWR_MODULE_FUEL_CELL_I2C_TLA2021_ADDRESS, 0x01, 0x8503))
             {
-                twr_log_debug("error init");
-
                 goto start;
             }
 
@@ -105,13 +95,10 @@ static void _twr_module_fuel_cell_task_measure(void *param)
         }
         case TWR_MODULE_FUEL_CELL_STATE_MEASURE:
         {
-            twr_log_debug("measure");
             _twr_module_fuel_cell._state = TWR_MODULE_FUEL_CELL_STATE_ERROR;
 
             if (!twr_i2c_memory_write_16b(TWR_I2C_I2C0, _TWR_MODULE_FUEL_CELL_I2C_TLA2021_ADDRESS, 0x01, 0x8503))
             {
-                twr_log_debug("error measure");
-
                 goto start;
             }
 
@@ -123,29 +110,22 @@ static void _twr_module_fuel_cell_task_measure(void *param)
         }
         case TWR_MODULE_FUEL_CELL_STATE_READ:
         {
-            twr_log_debug("read");
             _twr_module_fuel_cell._state = TWR_MODULE_FUEL_CELL_STATE_ERROR;
 
             uint16_t reg_configuration;
 
             if (!twr_i2c_memory_read_16b(TWR_I2C_I2C0, _TWR_MODULE_FUEL_CELL_I2C_TLA2021_ADDRESS, 0x01, &reg_configuration))
             {
-                twr_log_debug("error read 0");
-
                 goto start;
             }
 
             if ((reg_configuration & 0x8000) != 0x8000)
             {
-                twr_log_debug("error read 1");
-
                 goto start;
             }
 
             if (!twr_i2c_memory_read_16b(TWR_I2C_I2C0, _TWR_MODULE_FUEL_CELL_I2C_TLA2021_ADDRESS, 0x00, &_twr_module_fuel_cell._reg_result))
             {
-                twr_log_debug("error read 2");
-
                 goto start;
             }
 
@@ -153,13 +133,10 @@ static void _twr_module_fuel_cell_task_measure(void *param)
 
             _twr_module_fuel_cell._state = TWR_MODULE_FUEL_CELL_STATE_UPDATE;
 
-            twr_log_debug("%d", reg_configuration);
-
             goto start;
         }
         case TWR_MODULE_FUEL_CELL_STATE_UPDATE:
         {
-            twr_log_debug("update");
             _twr_module_fuel_cell._measurement_active = false;
 
             if (_twr_module_fuel_cell._event_handler != NULL)
@@ -174,8 +151,6 @@ static void _twr_module_fuel_cell_task_measure(void *param)
         default:
         {
             _twr_module_fuel_cell._state = TWR_MODULE_FUEL_CELL_STATE_ERROR;
-
-            twr_log_debug("error default");
 
             goto start;
         }
@@ -193,10 +168,6 @@ bool twr_module_fuel_cell_get_voltage(float *voltage)
 
     if (reg_result == 0x7ff0)
         return false;
-
-    twr_log_debug("RAW: %u", (uint32_t) (reg_result >> 4));
-
-
 
     *voltage = reg_result < 0 ? 0 : (uint64_t) (reg_result >> 4) * 2048 * (TWR_FUEL_CELL_R1_DIVIDER + TWR_FUEL_CELL_R2_DIVIDER) / (2047 * TWR_FUEL_CELL_R2_DIVIDER);
     *voltage /= 1000.f;

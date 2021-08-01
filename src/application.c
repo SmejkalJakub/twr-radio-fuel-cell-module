@@ -1,17 +1,13 @@
 #include <application.h>
 #include <twr_fuel_cell_module.h>
 
-#define TEMPERATURE_UPDATE_INTERVAL (5 * 1000)
 #define VOLTAGE_UPDATE_INTERVAL (5 * 1000)
 
 #define BATTERY_UPDATE_INTERVAL (1 * 60 * 1000)
 #define APPLICATION_TASK_ID 0
 
-#define TEMPERATURE_GRAPH (5 * 60 * 1000)
 #define VOLTAGE_GRAPH (5 * 60 * 1000)
 
-
-TWR_DATA_STREAM_FLOAT_BUFFER(temperature_stream_buffer, (TEMPERATURE_GRAPH / TEMPERATURE_UPDATE_INTERVAL))
 TWR_DATA_STREAM_FLOAT_BUFFER(voltage_stream_buffer, (VOLTAGE_GRAPH / VOLTAGE_UPDATE_INTERVAL))
 
 // LED instance
@@ -24,19 +20,14 @@ twr_led_t lcd_led_red;
 // Button instance
 twr_button_t button;
 
-twr_tmp112_t tmp112;
-
 twr_gfx_t *gfx;
 
-float temperature = NAN;
 float voltage = NAN;
 float x = 0;
 
 int points = 0;
 
-twr_data_stream_t temperature_stream;
 twr_data_stream_t voltage_stream;
-
 
 int game_counter = 0;
 int game_counter_stop = 5;
@@ -46,6 +37,7 @@ bool game_active = false;
 
 bool timer_active = false;
 bool timer_done = false;
+bool voltage_nan = false;
 
 int point_x = 63;
 int point_y = 80;
@@ -62,25 +54,33 @@ void button_event_handler(twr_button_t *self, twr_button_event_t event, void *ev
 
 void fast_radio_messages()
 {
-    twr_radio_pub_int("game/points", &points);
-
-    game_counter++;
-
-    if(game_counter == game_counter_stop)
+    if(!voltage_nan)
     {
-        game_active = true;
-        game_counter = 0;
+        twr_radio_pub_int("game/points", &points);
 
-        game_counter_stop = (rand() % 4) + 4;
-        twr_log_debug("%d", game_counter_stop);
+        game_counter++;
 
-        twr_scheduler_plan_current_from_now(800);
+        if(game_counter == game_counter_stop)
+        {
+            game_active = true;
+            game_counter = 0;
+
+            game_counter_stop = (rand() % 4) + 4;
+            twr_log_debug("%d", game_counter_stop);
+
+            twr_scheduler_plan_current_from_now(800);
+        }
+        else
+        {
+            game_active = false;
+            twr_scheduler_plan_current_from_now(300);
+            twr_led_pulse(&lcd_led_blue, 100);
+        }
     }
     else
     {
+        timer_done = false;
         game_active = false;
-        twr_scheduler_plan_current_from_now(300);
-        twr_led_pulse(&lcd_led_blue, 100);
     }
 
     twr_scheduler_plan_now(APPLICATION_TASK_ID);
@@ -110,7 +110,6 @@ void lcd_event_handler(twr_module_lcd_event_t event, void *event_param)
 {
     if(event == TWR_MODULE_LCD_EVENT_RIGHT_PRESS)
     {
-
         if(timer_done && game_active)
         {
             twr_log_debug("points++");
@@ -124,18 +123,6 @@ void lcd_event_handler(twr_module_lcd_event_t event, void *event_param)
             twr_led_pulse(&lcd_led_red, 200);
             points--;
         }
-        //x = ((float)rand()/(float)(RAND_MAX)) * 1.5f;
-
-        x += 0.02;
-
-        if(x > 1.14f)
-        {
-            x = 1.14f;
-        }
-
-        float y = pow(x, 2);
-
-        twr_data_stream_feed(&temperature_stream, &y);
     }
     else if(event == TWR_MODULE_LCD_EVENT_LEFT_PRESS)
     {
@@ -153,16 +140,6 @@ void lcd_event_handler(twr_module_lcd_event_t event, void *event_param)
             twr_led_pulse(&lcd_led_red, 200);
             points--;
         }
-        x -= 0.02;
-
-        if(x < 0)
-        {
-            x = 0;
-        }
-
-        float y = pow(x, 2);
-
-        twr_data_stream_feed(&temperature_stream, &y);
     }
     else if(event == TWR_MODULE_LCD_EVENT_BOTH_HOLD)
     {
@@ -184,27 +161,6 @@ void battery_event_handler(twr_module_battery_event_t event, void *event_param)
     }
 }
 
-void tmp112_event_handler(twr_tmp112_t *self, twr_tmp112_event_t event, void *event_param)
-{
-    temperature = NAN;
-
-    if (event == TWR_TMP112_EVENT_UPDATE)
-    {
-        if (twr_tmp112_get_temperature_celsius(self, &temperature))
-        {
-            /*twr_data_stream_feed(&temperature_stream, &temperature);
-
-            twr_radio_pub_temperature(TWR_RADIO_PUB_CHANNEL_R1_I2C0_ADDRESS_DEFAULT, &temperature);
-
-            float avg_temperature = NAN;
-
-            twr_data_stream_get_average(&temperature_stream, &avg_temperature);*/
-        }
-    }
-
-    twr_scheduler_plan_now(APPLICATION_TASK_ID);
-}
-
 void fuel_cell_module_event_handler(twr_module_fuel_cell_event_t event, void *param)
 {
     if(event == TWR_MODULE_FUEL_CELL_EVENT_VOLTAGE)
@@ -217,6 +173,11 @@ void fuel_cell_module_event_handler(twr_module_fuel_cell_event_t event, void *pa
         if(voltage != NAN)
         {
             twr_data_stream_feed(&voltage_stream, &voltage);
+        }
+        else if(voltage == NAN || voltage <= 0.55f)
+        {
+            game_active = false;
+            voltage_nan = true;
         }
     }
     twr_scheduler_plan_now(APPLICATION_TASK_ID);
@@ -240,11 +201,6 @@ void application_init(void)
     twr_module_battery_set_event_handler(battery_event_handler, NULL);
     twr_module_battery_set_update_interval(BATTERY_UPDATE_INTERVAL);
 
-    twr_tmp112_init(&tmp112, TWR_I2C_I2C0, 0x49);
-    twr_tmp112_set_event_handler(&tmp112, tmp112_event_handler, NULL);
-    twr_tmp112_set_update_interval(&tmp112, TEMPERATURE_UPDATE_INTERVAL);
-
-    twr_data_stream_init(&temperature_stream, 1, &temperature_stream_buffer);
     twr_data_stream_init(&voltage_stream, 1, &voltage_stream_buffer);
 
     twr_radio_init(TWR_RADIO_MODE_NODE_SLEEPING);
@@ -272,17 +228,6 @@ void graph(twr_gfx_t *gfx, int x0, int y0, int x1, int y1, twr_data_stream_t *da
     char str[32];
     int width = x1 - x0;
     int height = y1 - y0;
-
-    /*twr_data_stream_get_max(data_stream, &max_value);
-
-    twr_data_stream_get_min(data_stream, &min_value);*/
-
-    /*if (min_value > 0)
-    {
-        min_value = 0;
-    }*/
-
-    //max_value = ceilf(max_value / 5) * 5;
 
     twr_module_lcd_set_font(&twr_font_ubuntu_11);
 
@@ -433,7 +378,12 @@ void application_task(void)
 
     twr_gfx_clear(gfx);
 
-    if (page && !timer_active && !timer_done)
+    if(voltage_nan)
+    {
+        twr_gfx_set_font(gfx, &twr_font_ubuntu_33);
+        twr_gfx_printf(gfx, 55, 50, 1, "Konec");
+    }
+    else if (page && !timer_active && !timer_done)
     {
         int w;
         twr_gfx_set_font(gfx, &twr_font_ubuntu_15);
@@ -445,9 +395,7 @@ void application_task(void)
         twr_gfx_set_font(gfx, &twr_font_ubuntu_15);
         twr_gfx_draw_string(gfx, w + 5, 23, "V", 1);
 
-        graph(gfx, 0, 40, 127, 127, &voltage_stream, TEMPERATURE_UPDATE_INTERVAL, 0, 1.5f, 4, true, "%.2f" "\xb0" "V");
-
-
+        graph(gfx, 0, 40, 127, 127, &voltage_stream, VOLTAGE_UPDATE_INTERVAL, 0, 1.5f, 4, true, "%.2f" "\xb0" "V");
     }
     else if(timer_active)
     {
@@ -466,7 +414,7 @@ void application_task(void)
         twr_gfx_set_font(gfx, &twr_font_ubuntu_15);
         twr_gfx_draw_string(gfx, w + 5, 23, "V", 1);
 
-        graph(gfx, 0, 40, 127, 127, &voltage_stream, TEMPERATURE_UPDATE_INTERVAL, 0, 1.5f, 4, true, "%.2f" "\xb0" "V");
+        graph(gfx, 0, 40, 127, 127, &voltage_stream, VOLTAGE_UPDATE_INTERVAL, 0, 1.5f, 4, true, "%.2f" "\xb0" "V");
     }
 
     twr_gfx_update(gfx);
