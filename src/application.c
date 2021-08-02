@@ -73,7 +73,7 @@ void fast_radio_messages()
         else
         {
             game_active = false;
-            twr_scheduler_plan_current_from_now(300);
+            twr_scheduler_plan_current_from_now(3000);
             twr_led_pulse(&lcd_led_blue, 100);
         }
     }
