@@ -182,7 +182,7 @@ void fuel_cell_module_event_handler(twr_module_fuel_cell_event_t event, void *pa
         {
             twr_data_stream_feed(&voltage_stream, &voltage);
         }
-        if(voltage <= 1.2)
+        if(voltage <= 0.98)
         {
             twr_log_debug("voltage low");
             game_active = false;
