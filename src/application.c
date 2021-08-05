@@ -37,7 +37,7 @@ bool game_active = false;
 
 bool timer_active = false;
 bool timer_done = false;
-bool voltage_nan = false;
+bool voltage_low = false;
 
 int point_x = 63;
 int point_y = 80;
@@ -54,7 +54,7 @@ void button_event_handler(twr_button_t *self, twr_button_event_t event, void *ev
 
 void fast_radio_messages()
 {
-    if(!voltage_nan)
+    if(!voltage_low)
     {
         twr_radio_pub_int("game/points", &points);
 
@@ -73,7 +73,7 @@ void fast_radio_messages()
         else
         {
             game_active = false;
-            twr_scheduler_plan_current_from_now(3000);
+            twr_scheduler_plan_current_from_now(300);
             twr_led_pulse(&lcd_led_blue, 100);
         }
     }
@@ -108,7 +108,7 @@ void countdown_timer()
 
 void lcd_event_handler(twr_module_lcd_event_t event, void *event_param)
 {
-    if(event == TWR_MODULE_LCD_EVENT_RIGHT_PRESS)
+    if(event == TWR_MODULE_LCD_EVENT_RIGHT_PRESS && !voltage_low)
     {
         if(timer_done && game_active)
         {
@@ -124,7 +124,7 @@ void lcd_event_handler(twr_module_lcd_event_t event, void *event_param)
             points--;
         }
     }
-    else if(event == TWR_MODULE_LCD_EVENT_LEFT_PRESS)
+    else if(event == TWR_MODULE_LCD_EVENT_LEFT_PRESS && !voltage_low)
     {
         if(timer_done && game_active)
         {
@@ -141,7 +141,7 @@ void lcd_event_handler(twr_module_lcd_event_t event, void *event_param)
             points--;
         }
     }
-    else if(event == TWR_MODULE_LCD_EVENT_BOTH_HOLD)
+    else if(event == TWR_MODULE_LCD_EVENT_BOTH_HOLD  && !timer_done)
     {
         timer_active = true;
         twr_scheduler_register(countdown_timer, NULL, 0);
@@ -163,7 +163,7 @@ void battery_event_handler(twr_module_battery_event_t event, void *event_param)
 
 void fuel_cell_module_event_handler(twr_module_fuel_cell_event_t event, void *param)
 {
-    if(event == TWR_MODULE_FUEL_CELL_EVENT_VOLTAGE)
+    if(event == TWR_MODULE_FUEL_CELL_EVENT_VOLTAGE && !voltage_low)
     {
         voltage = NAN;
         twr_module_fuel_cell_get_voltage(&voltage);
@@ -174,10 +174,11 @@ void fuel_cell_module_event_handler(twr_module_fuel_cell_event_t event, void *pa
         {
             twr_data_stream_feed(&voltage_stream, &voltage);
         }
-        else if(voltage == NAN || voltage <= 0.55f)
+        if(voltage <= 1.2)
         {
+            twr_log_debug("voltage low");
             game_active = false;
-            voltage_nan = true;
+            voltage_low = true;
         }
     }
     twr_scheduler_plan_now(APPLICATION_TASK_ID);
@@ -378,10 +379,10 @@ void application_task(void)
 
     twr_gfx_clear(gfx);
 
-    if(voltage_nan)
+    if(voltage_low)
     {
         twr_gfx_set_font(gfx, &twr_font_ubuntu_33);
-        twr_gfx_printf(gfx, 55, 50, 1, "Konec");
+        twr_gfx_printf(gfx, 15, 50, 1, "Konec");
     }
     else if (page && !timer_active && !timer_done)
     {
