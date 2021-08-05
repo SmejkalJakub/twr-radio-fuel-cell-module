@@ -52,6 +52,14 @@ void button_event_handler(twr_button_t *self, twr_button_event_t event, void *ev
     }
 }
 
+void twr_radio_set_power(int dbm_power)
+{
+    for(int i = 0; i < 8; i++)
+    {
+        SpiritRadioSetPALeveldBm(i, dbm_power);
+    }
+}
+
 void fast_radio_messages()
 {
     if(!voltage_low)
@@ -205,6 +213,7 @@ void application_init(void)
     twr_data_stream_init(&voltage_stream, 1, &voltage_stream_buffer);
 
     twr_radio_init(TWR_RADIO_MODE_NODE_SLEEPING);
+    twr_radio_set_power(POWER_DBM);
     twr_radio_pairing_request("fuel-cell", VERSION);
 
     twr_module_lcd_init();

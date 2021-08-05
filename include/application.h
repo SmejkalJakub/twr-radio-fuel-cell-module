@@ -5,6 +5,9 @@
 #define VERSION "vdev"
 #endif
 
+#define POWER_DBM -5
+
 #include <twr.h>
+#include "SPIRIT_Config.h"
 
 #endif
